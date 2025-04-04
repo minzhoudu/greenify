@@ -1,16 +1,17 @@
-import { COLORS } from '@/constants/theme';
 import { api } from '@/convex/_generated/api';
 import { Id } from '@/convex/_generated/dataModel';
-import { toggleLike } from '@/convex/posts';
-import { styles } from '@/styles/feed.styles';
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
+import { formatDistanceToNow } from 'date-fns';
 import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+
+import { COLORS } from '@/constants/theme';
+import { styles } from '@/styles/feed.styles';
 import CommentsModal from '../comments/CommentsModal';
-import { formatDistanceToNow } from 'date-fns';
+import { useUser } from '@clerk/clerk-expo';
 
 type User = {
     _id?: Id<'users'>;
@@ -32,13 +33,21 @@ type Post = {
 };
 
 export default function Post({ post }: { post: Post }) {
+    const { user } = useUser();
+
     const [isLiked, setIsLiked] = useState(post.isLiked);
     const [likesCount, setLikesCount] = useState(post.likes);
+
+    const [isBookmarked, setIsBookmarked] = useState(post.isBookmarked);
 
     const [showCommentsModal, setShowCommentsModal] = useState(false);
     const [commentsCount, setCommentsCount] = useState(post.comments);
 
     const toggleLike = useMutation(api.posts.toggleLike);
+    const toggleBookmark = useMutation(api.bookmarks.toggleBookmark);
+    const deletePost = useMutation(api.posts.deletePost);
+
+    const currentUser = useQuery(api.users.getUserByClerkId, user ? { clerkId: user?.id } : 'skip');
 
     const handleLike = async () => {
         try {
@@ -47,6 +56,23 @@ export default function Post({ post }: { post: Post }) {
             setLikesCount((prev) => (liked ? prev + 1 : prev - 1));
         } catch (error) {
             console.error('Error toggling like', error);
+        }
+    };
+
+    const handleBookmark = async () => {
+        try {
+            const bookmarked = await toggleBookmark({ postId: post._id });
+            setIsBookmarked(bookmarked);
+        } catch (error) {
+            console.error('Error toggling bookmark', error);
+        }
+    };
+
+    const handleDelete = async () => {
+        try {
+            await deletePost({ postId: post._id });
+        } catch (error) {
+            console.error('Error deleting post', error);
         }
     };
 
@@ -65,13 +91,15 @@ export default function Post({ post }: { post: Post }) {
                     </TouchableOpacity>
                 </Link>
 
-                {/* <TouchableOpacity>
-                    <Ionicons name="ellipsis-horizontal" size={20} color={COLORS.white} />
-                </TouchableOpacity> */}
-
-                <TouchableOpacity>
-                    <Ionicons name="trash-outline" size={20} color={COLORS.primary} />
-                </TouchableOpacity>
+                {currentUser?._id === post.author._id ? (
+                    <TouchableOpacity onPress={handleDelete}>
+                        <Ionicons name="trash-outline" size={20} color={COLORS.primary} />
+                    </TouchableOpacity>
+                ) : (
+                    <TouchableOpacity>
+                        <Ionicons name="ellipsis-horizontal" size={20} color={COLORS.white} />
+                    </TouchableOpacity>
+                )}
             </View>
 
             <Image
@@ -95,8 +123,13 @@ export default function Post({ post }: { post: Post }) {
                         <Ionicons name="chatbubble-outline" size={21} color={COLORS.white} />
                     </TouchableOpacity>
                 </View>
-                <TouchableOpacity>
-                    <Ionicons name="bookmark-outline" size={22} color={COLORS.white} />
+                {/* isBookmarked */}
+                <TouchableOpacity onPress={handleBookmark}>
+                    <Ionicons
+                        name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
+                        size={22}
+                        color={isBookmarked ? COLORS.primary : COLORS.white}
+                    />
                 </TouchableOpacity>
             </View>
 
